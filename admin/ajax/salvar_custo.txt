@@ -1,0 +1,124 @@
+﻿<?php
+require_once __DIR__ . '/../../backend/conexao.php';
+
+$acao = $_GET['acao'] ?? '';
+$p = intval($_GET['p'] ?? $_POST['p'] ?? 0);
+$pv = floatval($_GET['pv'] ?? $_POST['pv'] ?? 0);
+
+// ========================
+// LISTAR INSUMOS DO PRODUTO
+// ========================
+if($acao === 'listar' && $p > 0){
+  $res = $conn->query("SELECT pi.id, i.nome, i.unidade, i.preco_unit, pi.quantidade 
+                       FROM produto_insumo pi 
+                       JOIN insumos i ON i.id = pi.insumo_id 
+                       WHERE pi.produto_id=$p");
+  echo '<table class="table table-striped">';
+  echo '<tr><th>Insumo</th><th>Unidade</th><th>Qtd</th><th>Preço Unit</th><th>Subtotal</th><th></th></tr>';
+  while($r = $res->fetch_assoc()){
+    $sub = $r['quantidade'] * $r['preco_unit'];
+    echo "<tr>
+            <td>{$r['nome']}</td>
+            <td>{$r['unidade']}</td>
+            <td><input type='number' class='form-control form-control-sm qtdInput' data-id='{$r['id']}' value='{$r['quantidade']}' style='width:90px;'></td>
+            <td>R$ ".number_format($r['preco_unit'],2,',','.')."</td>
+            <td>R$ ".number_format($sub,2,',','.')."</td>
+            <td><button class='btn btn-danger btn-sm btnDel' data-id='{$r['id']}'>🗑</button></td>
+          </tr>";
+  }
+  echo '</table>';
+  exit;
+}
+
+// ========================
+// ADICIONAR
+// ========================
+if($acao === 'add'){
+  $produto_id = intval($_POST['produto_id'] ?? 0);
+  $insumo_id = intval($_POST['insumo_id'] ?? 0);
+  $quantidade = floatval($_POST['quantidade'] ?? 0);
+  if($produto_id>0 && $insumo_id>0){
+    $stmt = $conn->prepare("INSERT INTO produto_insumo (produto_id, insumo_id, quantidade) VALUES (?,?,?)");
+    $stmt->bind_param("iid", $produto_id, $insumo_id, $quantidade);
+    $stmt->execute();
+  }
+  exit;
+}
+
+// ========================
+// EDITAR QUANTIDADE
+// ========================
+if($acao === 'edit'){
+  $id = intval($_POST['id'] ?? 0);
+  $qtd = floatval($_POST['quantidade'] ?? 0);
+  if($id>0){
+    $stmt = $conn->prepare("UPDATE produto_insumo SET quantidade=? WHERE id=?");
+    $stmt->bind_param("di", $qtd, $id);
+    $stmt->execute();
+  }
+  exit;
+}
+
+// ========================
+// EXCLUIR INSUMO
+// ========================
+if($acao === 'del'){
+  $id = intval($_POST['id'] ?? 0);
+  if($id>0){
+    $stmt = $conn->prepare("DELETE FROM produto_insumo WHERE id=?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+  }
+  exit;
+}
+
+// ========================
+// CALCULAR TOTAIS
+// ========================
+if($acao === 'totais' && $p>0){
+  $res = $conn->query("SELECT pi.quantidade, i.preco_unit 
+                       FROM produto_insumo pi 
+                       JOIN insumos i ON i.id = pi.insumo_id 
+                       WHERE pi.produto_id=$p");
+  $custo = 0;
+  while($r=$res->fetch_assoc()){
+    $custo += $r['quantidade'] * $r['preco_unit'];
+  }
+  $lucro = $pv - $custo;
+  $margem = ($pv>0) ? round(($lucro/$pv)*100,2) : 0;
+  echo json_encode([
+    'custo'=>number_format($custo,2,',','.'),
+    'lucro'=>number_format($lucro,2,',','.'),
+    'margem'=>$margem
+  ]);
+  exit;
+}
+
+// ========================
+// SALVAR CUSTO NO BANCO
+// ========================
+if($acao === 'salvar_custo' && $p>0){
+  $res = $conn->query("SELECT pi.quantidade, i.preco_unit 
+                       FROM produto_insumo pi 
+                       JOIN insumos i ON i.id = pi.insumo_id 
+                       WHERE pi.produto_id=$p");
+  $custo = 0;
+  while($r=$res->fetch_assoc()){
+    $custo += $r['quantidade'] * $r['preco_unit'];
+  }
+  $lucro = $pv - $custo;
+  $margem = ($pv>0) ? round(($lucro/$pv)*100,2) : 0;
+
+  // Atualiza no produto
+  $up = $conn->prepare("UPDATE produtos SET custo_atual=?, margem_atual=? WHERE id=?");
+  $up->bind_param("ddi", $custo, $margem, $p);
+  $up->execute();
+
+  // Grava histórico
+  $ins = $conn->prepare("INSERT INTO produto_custos (produto_id, preco_venda, custo_total, lucro_bruto, margem_bruta) VALUES (?,?,?,?,?)");
+  $ins->bind_param("idddd", $p, $pv, $custo, $lucro, $margem);
+  $ins->execute();
+
+  echo "Custo total R$ ".number_format($custo,2,',','.')." salvo com sucesso!";
+  exit;
+}

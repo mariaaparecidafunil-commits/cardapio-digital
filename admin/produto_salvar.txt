@@ -1,0 +1,105 @@
+﻿<?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/../backend/conexao.php';
+
+// Proteção admin
+if (!isset($_SESSION['admin_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+// ================================
+// VALORES RECEBIDOS
+// ================================
+$nome = trim($_POST['nome'] ?? '');
+$categoria_id = intval($_POST['categoria_id'] ?? 0);
+
+// ================================
+// REGRAS DE PREÇO POR CATEGORIA
+// ================================
+if ($categoria_id == 20) { 
+    // LANCHES
+    $preco_industrial = floatval($_POST['preco_industrial'] ?? 0);
+    $preco_frango     = floatval($_POST['preco_frango'] ?? 0);
+    $preco_artesanal  = floatval($_POST['preco_artesanal'] ?? 0);
+} else {
+    // BEBIDAS / SUCOS = preço único
+    $preco_unico      = floatval($_POST['preco_unico'] ?? 0);
+    $preco_industrial = $preco_unico;
+    $preco_frango     = 0;
+    $preco_artesanal  = 0;
+}
+
+// ================================
+// SALVAR PRODUTO
+// ================================
+$stmt = $conn->prepare("
+    INSERT INTO produtos (nome, categoria_id, preco_industrial, preco_frango, preco_artesanal)
+    VALUES (?, ?, ?, ?, ?)
+");
+$stmt->bind_param("siddi", 
+    $nome, 
+    $categoria_id, 
+    $preco_industrial, 
+    $preco_frango, 
+    $preco_artesanal
+);
+$stmt->execute();
+
+// ID do novo produto
+$produto_id = $stmt->insert_id;
+$stmt->close();
+
+// ================================
+// UPLOAD DE IMAGEM
+// ================================
+if (!empty($_FILES['imagem']['name'])) {
+
+    $nome_img = "produto_" . $produto_id . "_" . time() . ".jpg";
+    $destino = __DIR__ . "/../uploads/produtos/" . $nome_img;
+
+    move_uploaded_file($_FILES['imagem']['tmp_name'], $destino);
+
+    $conn->query("UPDATE produtos SET imagem='$nome_img' WHERE id=$produto_id");
+}
+
+// ================================
+// SALVAR INSUMOS
+// ================================
+if (!empty($_POST['insumos']) && is_array($_POST['insumos'])) {
+    foreach ($_POST['insumos'] as $ins) {
+        $iid = intval($ins['id']);
+        $qtd = floatval($ins['quantidade']);
+
+        if ($iid > 0 && $qtd > 0) {
+            $conn->query("
+                INSERT INTO produto_insumo (produto_id, insumo_id, quantidade)
+                VALUES ($produto_id, $iid, $qtd)
+            ");
+        }
+    }
+}
+
+// ================================
+// SALVAR OPCIONAIS
+// ================================
+if (!empty($_POST['opcionais']) && is_array($_POST['opcionais'])) {
+    foreach ($_POST['opcionais'] as $op) {
+        $op = intval($op);
+        if ($op > 0) {
+            $conn->query("
+                INSERT INTO produto_opcional (produto_id, opcional_id)
+                VALUES ($produto_id, $op)
+            ");
+        }
+    }
+}
+
+// ================================
+// REDIRECIONAR
+// ================================
+header("Location: produtos.php");
+exit;

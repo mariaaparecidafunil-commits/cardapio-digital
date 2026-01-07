@@ -1,0 +1,21 @@
+# Segredos / conexão
+/backend/config.php
+/backend/conexao.php
+.env
+.env.*
+
+# Uploads e arquivos gerados
+/uploads/
+/logs/
+/cache/
+/tmp/
+error.log
+
+# Dependências (se usar Composer)
+/vendor/
+
+# IDE / SO
+/.vscode/
+/.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,18 @@
+# ============================
+# Painel Administrativo - Mimoso Lanches
+# ============================
+
+# Arquivo padrão do admin
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# Não reescreve arquivos ou diretórios reais
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Se acessar apenas /admin → abre dashboard (index.php)
+RewriteRule ^$ index.php [L]
+</IfModule>
